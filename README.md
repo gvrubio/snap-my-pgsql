@@ -5,12 +5,12 @@ I made it as a way to have quick table and full database restoration with multip
 
 I know PITR exists, but restoring a single table seemed to be too much hassle.
 
-The way I did set this up, was using a separate virtual disk or partition formatted with BTRFS, mounted it on the fstab, then I created a folder called "current", where the current backup of postgres is generated.
+The way I did set this up, was using a separate virtual disk or partition formatted with BTRFS, mounted it on the fstab as /mnt/snapshots, then I created a folder called "current", where the current backup of postgres is generated.
 
 After this I set up an btrfs subvolume where the snapshots are going to be stored.
 
 ```bash
-sudo btrfs subvolume create /snapshots/history
+sudo btrfs subvolume create /mnt/snapshots/history
 ```
 
 ```bash
