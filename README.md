@@ -16,7 +16,6 @@ sudo btrfs subvolume create /snapshots/history
 ```bash
 # Syntax:
 # Create backup
-
 ./snap-my-psql backup
 
 
