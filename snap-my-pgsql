@@ -1,0 +1,114 @@
+#!/bin/bash
+# TODO! Add a function to read the tables inside a backup.
+
+source ./config
+function echoc {
+    RED="\e[31m"
+    GREEN="\e[32m"
+    ENDCOLOR="\e[0m"
+
+    if [[ $1 == "red" ]]
+    then
+        echo -e ${RED}"$2"${ENDCOLOR}
+    elif [[ $1 == "green" ]]
+    then
+        echo -e ${GREEN}"$2"${ENDCOLOR}
+    else
+        echo "Specify a color"
+    fi
+}
+
+set -e
+
+
+function f_backup(){
+    echoc green '{+} Creating PostGres Backup'
+    if $docker
+    then
+        docker exec -it "$containerName" pg_dump -U $dbUser  $dbName -f $backupFolder/$backupFile -Fc
+    else
+        pg_dump -d -Fc -U $dbUser $dbName -C $backupFolder/$backupFile
+    fi
+    echoc green '{+} Creating snapshot'
+    btrfs subvolume snapshot $backupFolder $snapshotsFolder/$(date +"%m-%d-%Y_%H-%m-%S")
+}
+
+function f_list(){
+    btrfs subvolume list $backupFolder
+}
+
+function f_remove(){
+    if [ -z "$1" ]
+    then
+        echoc red 'You have to especify an snapshot path, use the parameter "list" to list them.'
+    else
+        echoc red "{-} Removing $baseFolder/$1"
+        btrfs subvolume delete $baseFolder/$1
+    fi
+}
+
+function f_recovery(){
+    case $1 in
+        database)
+            if [ -z "$2" ]
+            then
+                echoc red 'List your backups with "list" and use it as parameter for "restore database"'
+            else
+                if $docker
+                then
+                    docker exec -it "$containerName" pg_restore -d postgis -U postgis -C $baseFolder/$2/$backupFile
+                else
+                    pg_restore -d postgis -U postgis -C $snapshotsFolder/$2
+                fi
+            fi
+            ;;
+        table)
+            if [ -z "$2" ]
+            then
+                echoc red 'List your backups with "list" and use it as parameter for "restore table"'
+            else
+                if [ -z "$3" ]
+                then
+                    echoc red 'Tell me the table you want to restore!'
+                    exit
+                else
+                    if $docker
+                    then
+                        docker exec -it "$containerName" pg_restore --table=$3 $baseFolder/$2/$backupFile -f /tmp/tmp.sql
+                        echoc green "Restoring the tmp!"
+                        docker exec -it "$containerName" bash -c "psql -U $dbUser $dbName < /tmp/tmp.sql"
+                    else
+                        pg_restore --table=$3 $baseFolder/$2/$backupFile -f /tmp/tmp.sql
+                        psql -U $dbUser $dbName < /tmp/tmp.sql
+                    fi
+                fi
+            fi
+            ;;
+        *)
+            ;;
+    esac
+}
+
+
+case $1 in
+    backup)
+        f_backup
+        ;;
+    list)
+        f_list
+        ;;
+    remove)
+        f_remove $2
+        ;;
+    recover)
+        f_recovery $2 $3 $4
+        ;;
+    *)
+        echo '----------'
+        echo 'Arguments:'
+        echo '----------'
+        echoc green 'backup   : Starts a new backup'
+        echoc green 'list     : Lists all snapshots'
+        echoc red 'remove   : Removes snapshots, you can list them with the argument "list"'
+        ;;
+esac
